@@ -36,13 +36,13 @@ The server reads environment variables from a local `.env` file or from the host
 
 ```env
 # Path to the primary Godot executable
-# Windows: "D:\Program Files\Godot\Godot.exe"
+# Windows: "C:\Program Files\Godot\Godot.exe"
 # Linux: "/usr/bin/godot"
 # macOS: "/Applications/Godot.app/Contents/MacOS/Godot"
-GODOT_PATH="D:\Program Files\Godot\Godot.exe"
+GODOT_PATH="C:\Program Files\Godot\Godot.exe"
 
 # Path to the Godot console wrapper (Windows) for synchronous log capturing
-GODOT_CONSOLE_PATH="D:\Program Files\Godot\Godot_console.exe"
+GODOT_CONSOLE_PATH="C:\Program Files\Godot\Godot_console.exe"
 
 # Communication port between MCP server and Godot Editor bridge
 GODOT_DEBUG_PORT="9333"
@@ -96,11 +96,11 @@ Windows:
 {
   "mcpServers": {
     "godot": {
-      "command": "D:/Projects/src/github.com/teratron/godot-mcp/target/release/godot-mcp.exe",
+      "command": "C:/path/to/godot-mcp/target/release/godot-mcp.exe",
       "args": [],
       "env": {
-        "GODOT_PATH": "D:\\Program Files\\Godot\\Godot.exe",
-        "GODOT_CONSOLE_PATH": "D:\\Program Files\\Godot\\Godot_console.exe",
+        "GODOT_PATH": "C:\\Program Files\\Godot\\Godot.exe",
+        "GODOT_CONSOLE_PATH": "C:\\Program Files\\Godot\\Godot_console.exe",
         "GODOT_DEBUG_PORT": "9333"
       }
     }
@@ -133,7 +133,7 @@ Configure the server in your MCP settings (`.cursor/mcp.json` or `.gemini/antigr
 {
   "mcpServers": {
     "godot": {
-      "command": "D:/Projects/src/github.com/teratron/godot-mcp/target/release/godot-mcp.exe",
+      "command": "/path/to/godot-mcp/target/release/godot-mcp.exe",
       "args": []
     }
   }
