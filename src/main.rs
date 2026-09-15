@@ -1,5 +1,3 @@
-fn main() {
-    println!("Hello, world!");
 use godot_mcp::config::Config;
 use godot_mcp::error::Result;
 use godot_mcp::server::McpServer;
