@@ -1,0 +1,7 @@
+# IDE files
+.idea/
+.vscode/
+
+# Dotenv files (local secrets — never commit)
+.env*
+!.env.example
