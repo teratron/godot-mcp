@@ -1,6 +1,6 @@
 [package]
 name = "godot-mcp"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 authors = ["Oleg Alexandrov <alexandrovoleg.ru@gmail.com>"]
 description = "High-performance Model Context Protocol (MCP) server for the Godot Game Engine"
