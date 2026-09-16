@@ -56,25 +56,53 @@ impl ToolManager {
             },
             Tool {
                 name: "godot_run_project".into(),
-                description: "Runs the Godot project or a specific scene in debug mode.".into(),
+                description: "Runs the Godot project or a specific scene in debug mode. Uses the live editor's own Play mechanism if the bridge is connected (so godot_stop_project and godot_get_run_status can control it); falls back to spawning a headless CLI process otherwise, which requires project_path.".into(),
                 input_schema: json!({
                     "type": "object",
                     "properties": {
                         "project_path": {
                             "type": "string",
-                            "description": "Path to the project root directory."
+                            "description": "Path to the project root directory. Only required for the headless CLI fallback (i.e. when no editor is connected)."
                         },
                         "scene": {
                             "type": "string",
-                            "description": "Optional specific scene path (e.g., 'res://scenes/Main.tscn')."
+                            "description": "Optional specific scene path (e.g., 'res://scenes/Main.tscn'). Defaults to the project's main scene."
                         }
-                    },
-                    "required": ["project_path"]
+                    }
+                }),
+            },
+            Tool {
+                name: "godot_stop_project".into(),
+                description: "Stops the project currently running via the live editor's Play mode (started by godot_run_project). Requires the editor bridge to be connected; it cannot stop a process spawned by the headless CLI fallback.".into(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {}
+                }),
+            },
+            Tool {
+                name: "godot_get_run_status".into(),
+                description: "Reports whether a scene is currently playing via the live editor's Play mode, and which one. Requires the editor bridge to be connected.".into(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {}
                 }),
             },
             Tool {
                 name: "godot_get_scene_tree".into(),
-                description: "Retrieves the complete node hierarchy of the active scene open in Godot Editor.".into(),
+                description: "Retrieves the complete node hierarchy of a scene open in Godot Editor.".into(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "scene_path": {
+                            "type": "string",
+                            "description": "Optional res:// path of an open scene tab to inspect. Defaults to the currently active/focused scene tab. Use godot_get_open_scenes to list valid values."
+                        }
+                    }
+                }),
+            },
+            Tool {
+                name: "godot_get_open_scenes".into(),
+                description: "Lists the res:// paths of all scenes currently open as tabs in the editor, and which one is active.".into(),
                 input_schema: json!({
                     "type": "object",
                     "properties": {}
@@ -218,6 +246,20 @@ impl ToolManager {
                     "required": ["script_path"]
                 }),
             },
+            Tool {
+                name: "godot_resave_resources".into(),
+                description: "Forces re-import and cache invalidation for updated assets and resources. Requires the editor bridge to be connected.".into(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "paths": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "res:// paths of specific source assets to reimport (e.g. after editing them externally). Reimport runs synchronously and completes before this call returns. If omitted or empty, triggers a full project filesystem rescan instead, which runs in the background and may still be in progress when this call returns."
+                        }
+                    }
+                }),
+            },
         ]
     }
 
@@ -228,7 +270,10 @@ impl ToolManager {
             "godot_get_project_info" => self.handle_bridge_call("get_project_info", args).await,
             "godot_launch_editor" => self.handle_launch_editor(args).await,
             "godot_run_project" => self.handle_run_project(args).await,
+            "godot_stop_project" => self.handle_bridge_call("stop_project", args).await,
+            "godot_get_run_status" => self.handle_bridge_call("get_run_status", args).await,
             "godot_get_scene_tree" => self.handle_bridge_call("get_scene_tree", args).await,
+            "godot_get_open_scenes" => self.handle_bridge_call("get_open_scenes", args).await,
             "godot_add_node" => self.handle_bridge_call("add_node", args).await,
             "godot_remove_node" => self.handle_bridge_call("remove_node", args).await,
             "godot_get_node_properties" => {
@@ -242,6 +287,7 @@ impl ToolManager {
             "godot_save_scene" => self.handle_bridge_call("save_scene", args).await,
             "godot_create_script" => self.handle_create_script(args).await,
             "godot_validate_script" => self.handle_validate_script(args).await,
+            "godot_resave_resources" => self.handle_bridge_call("resave_resources", args).await,
             _ => ToolResult::error(
                 format!("Tool '{name}' is not recognized"),
                 &["Check tool name spelling against tools/list"],
@@ -334,17 +380,36 @@ impl ToolManager {
     }
 
     async fn handle_run_project(&self, args: Value) -> ToolResult {
+        let scene = args.get("scene").and_then(|s| s.as_str());
+
+        // Prefer the live editor: it can be stopped/queried later via
+        // godot_stop_project / godot_get_run_status, unlike a spawned process.
+        let bridge_params = json!({ "scene_path": scene.unwrap_or("") });
+        if let Ok(result) = self.bridge.send_command("run_project", bridge_params).await {
+            return ToolResult::text(format!(
+                "Project running via live editor:\n{}",
+                serde_json::to_string_pretty(&result).unwrap_or_default()
+            ));
+        }
+
+        // Fall back to a detached headless CLI process.
         let project_path_str = match args.get("project_path").and_then(|p| p.as_str()) {
             Some(p) => p,
-            None => return ToolResult::error("Missing required parameter: project_path", &[]),
+            None => {
+                return ToolResult::error(
+                    "No editor bridge connected, and no project_path given for the headless CLI fallback",
+                    &[
+                        "Launch the Godot Editor with this project and enable the Godot MCP Bridge plugin",
+                        "Or pass project_path to run headlessly instead",
+                    ],
+                );
+            }
         };
 
-        let scene = args.get("scene").and_then(|s| s.as_str());
         let path = PathBuf::from(project_path_str);
-
         match self.cli.run_project(&path, scene).await {
             Ok(pid) => ToolResult::text(format!(
-                "Godot project instance spawned (PID: {pid}) for '{}'.",
+                "No editor bridge connected. Spawned a headless Godot process instead (PID: {pid}) for '{}'. Note: godot_stop_project and godot_get_run_status only work through the live editor bridge, not this process.",
                 path.display()
             )),
             Err(e) => ToolResult::error(format!("Failed to run project: {e}"), &[]),

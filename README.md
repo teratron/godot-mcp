@@ -261,11 +261,14 @@ Pushing a tag matching `v*.*.*` (e.g. `v0.1.0`) runs `.github/workflows/release.
 - `godot_get_version`: Returns the Godot Engine version. Uses the live editor bridge if connected, otherwise falls back to `godot --version`.
 - `godot_get_project_info`: Inspects the project currently open in the live editor (name, main scene, enabled features). Requires the editor bridge to be connected.
 - `godot_launch_editor`: Launches the Godot Editor for a given project directory as a detached process.
-- `godot_run_project`: Runs the project (or a specific scene) in a detached process via headless/CLI invocation.
+- `godot_run_project`: Runs the project (or a specific scene). If the editor bridge is connected, this plays it via the editor's own Play mode (`EditorInterface.play_main_scene` / `play_custom_scene`) so it can be stopped and queried afterwards; otherwise it falls back to spawning a detached headless CLI process (requires `project_path`), which cannot be stopped or queried via MCP.
+- `godot_stop_project`: Stops a scene started by `godot_run_project` via the live editor. Requires the editor bridge.
+- `godot_get_run_status`: Reports whether a scene is currently playing via the live editor, and which one. Requires the editor bridge.
 
 ### Scene Management
 
-- `godot_get_scene_tree`: Retrieves the node hierarchy of the scene currently open in the editor.
+- `godot_get_scene_tree`: Retrieves the node hierarchy of a scene open in the editor. Defaults to the active tab; pass `scene_path` to target a different open scene tab.
+- `godot_get_open_scenes`: Lists the `res://` paths of all scene tabs currently open in the editor, and which one is active.
 - `godot_open_scene`: Opens a scene file in the editor by its `res://` path.
 - `godot_save_scene`: Saves the current open scene in the editor.
 
@@ -280,6 +283,7 @@ Pushing a tag matching `v*.*.*` (e.g. `v0.1.0`) runs `.github/workflows/release.
 
 - `godot_create_script`: Writes a new GDScript file to disk with a standard `extends`/`class_name`/`_ready()` template.
 - `godot_validate_script`: Runs `godot --headless --check-only` against a `.gd` file and reports syntax errors.
+- `godot_resave_resources`: Forces re-import of specific `res://` assets (synchronous, e.g. after editing them externally), or triggers a full project filesystem rescan if no `paths` are given (runs in the background — may still be in progress when the call returns). Requires the editor bridge.
 
 ### Visual Inspection
 
@@ -291,7 +295,7 @@ The following ideas are referenced in older design notes or reserved config fiel
 
 - Runtime log streaming and stack trace capture (`godot_get_debug_log`, `godot_get_stack_trace`)
 - In-scene camera capture (`godot_capture_camera`), as opposed to the editor viewport
-- Scene creation and resource resave tools (`godot_create_scene`, `godot_resave_resources`)
+- Scene creation tool (`godot_create_scene`)
 - Script attach/read/update tools beyond `godot_create_script` / `godot_validate_script`
 - Remote HTTP/SSE transport (`GODOT_MCP_URL`) and synchronous console log capture via a console wrapper (`GODOT_CONSOLE_PATH`)
 

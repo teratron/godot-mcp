@@ -34,6 +34,10 @@ fn test_tool_definitions() {
     assert!(tool_names.contains(&"godot_capture_viewport"));
     assert!(tool_names.contains(&"godot_create_script"));
     assert!(tool_names.contains(&"godot_validate_script"));
+    assert!(tool_names.contains(&"godot_stop_project"));
+    assert!(tool_names.contains(&"godot_get_run_status"));
+    assert!(tool_names.contains(&"godot_get_open_scenes"));
+    assert!(tool_names.contains(&"godot_resave_resources"));
 
     // Verify all input schemas are valid JSON objects
     for tool in tools {

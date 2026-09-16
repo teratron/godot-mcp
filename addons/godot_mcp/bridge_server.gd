@@ -85,7 +85,16 @@ func handle_message(peer: WebSocketPeer, raw_msg: String) -> void:
 
     var cmd_id: String = data.get("commandId", "")
     var cmd_type: String = data.get("type", "")
-    var params: Dictionary = data.get("params", {})
+
+    # A statically-typed `Dictionary` assignment throws a script error (not a
+    # catchable exception) if "params" is present but not an object, which
+    # aborts this function before any response is sent, leaving the caller
+    # hanging until its own timeout. Coerce defensively instead.
+    var raw_params = data.get("params", {})
+    var params: Dictionary = raw_params if raw_params is Dictionary else {}
+    if not raw_params is Dictionary and raw_params != null:
+        send_error(peer, cmd_id, "Field 'params' must be a JSON object, got: " + type_string(typeof(raw_params)))
+        return
 
     dispatch_command(peer, cmd_id, cmd_type, params)
 
@@ -98,7 +107,9 @@ func dispatch_command(peer: WebSocketPeer, cmd_id: String, cmd_type: String, par
         "get_project_info":
             get_project_info(peer, cmd_id)
         "get_scene_tree":
-            get_scene_tree(peer, cmd_id)
+            get_scene_tree(peer, cmd_id, params)
+        "get_open_scenes":
+            get_open_scenes(peer, cmd_id)
         "add_node":
             add_node(peer, cmd_id, params)
         "remove_node":
@@ -113,6 +124,14 @@ func dispatch_command(peer: WebSocketPeer, cmd_id: String, cmd_type: String, par
             open_scene(peer, cmd_id, params)
         "save_scene":
             save_scene(peer, cmd_id)
+        "run_project":
+            run_project(peer, cmd_id, params)
+        "stop_project":
+            stop_project(peer, cmd_id)
+        "get_run_status":
+            get_run_status(peer, cmd_id)
+        "resave_resources":
+            resave_resources(peer, cmd_id, params)
         _:
             send_error(peer, cmd_id, "Unknown command type: " + cmd_type)
 
@@ -135,14 +154,33 @@ func get_project_info(peer: WebSocketPeer, cmd_id: String) -> void:
         "features": ProjectSettings.get_setting("application/config/features", [])
     })
 
-func get_scene_tree(peer: WebSocketPeer, cmd_id: String) -> void:
-    var root = EditorInterface.get_edited_scene_root()
-    if root == null:
-        send_error(peer, cmd_id, "No active scene is currently open in the editor")
-        return
+func get_scene_tree(peer: WebSocketPeer, cmd_id: String, params: Dictionary) -> void:
+    var scene_path: String = params.get("scene_path", "")
+    var root: Node = null
+
+    if scene_path.is_empty():
+        root = EditorInterface.get_edited_scene_root()
+        if root == null:
+            send_error(peer, cmd_id, "No active scene is currently open in the editor")
+            return
+    else:
+        # get_open_scenes() and get_open_scene_roots() are parallel arrays
+        # (same order, same length) per the Godot editor API.
+        var open_paths: PackedStringArray = EditorInterface.get_open_scenes()
+        var idx: int = open_paths.find(scene_path)
+        if idx == -1:
+            send_error(peer, cmd_id, "Scene is not currently open in the editor: " + scene_path + ". Use get_open_scenes to list open scenes, or open_scene to open it first.")
+            return
+        root = EditorInterface.get_open_scene_roots()[idx]
 
     var tree_data = serialize_node(root)
-    send_success(peer, cmd_id, {"tree": tree_data})
+    send_success(peer, cmd_id, {"tree": tree_data, "scene_path": scene_path if not scene_path.is_empty() else String(root.scene_file_path)})
+
+func get_open_scenes(peer: WebSocketPeer, cmd_id: String) -> void:
+    send_success(peer, cmd_id, {
+        "open_scenes": EditorInterface.get_open_scenes(),
+        "active_scene": EditorInterface.get_edited_scene_root().scene_file_path if EditorInterface.get_edited_scene_root() != null else ""
+    })
 
 func serialize_node(node: Node) -> Dictionary:
     var children_data: Array[Dictionary] = []
@@ -316,6 +354,71 @@ func save_scene(peer: WebSocketPeer, cmd_id: String) -> void:
         send_success(peer, cmd_id, {"saved": true})
     else:
         send_error(peer, cmd_id, "Failed to save scene: " + error_string(err))
+
+func run_project(peer: WebSocketPeer, cmd_id: String, params: Dictionary) -> void:
+    var scene_path: String = params.get("scene_path", "")
+
+    if not scene_path.is_empty():
+        if not FileAccess.file_exists(scene_path):
+            send_error(peer, cmd_id, "Scene file does not exist: " + scene_path)
+            return
+        EditorInterface.play_custom_scene(scene_path)
+    else:
+        EditorInterface.play_main_scene()
+
+    send_success(peer, cmd_id, {
+        "running": EditorInterface.is_playing_scene(),
+        "scene": EditorInterface.get_playing_scene()
+    })
+
+func stop_project(peer: WebSocketPeer, cmd_id: String) -> void:
+    EditorInterface.stop_playing_scene()
+    send_success(peer, cmd_id, {"stopped": true})
+
+func get_run_status(peer: WebSocketPeer, cmd_id: String) -> void:
+    send_success(peer, cmd_id, {
+        "running": EditorInterface.is_playing_scene(),
+        "scene": EditorInterface.get_playing_scene()
+    })
+
+func resave_resources(peer: WebSocketPeer, cmd_id: String, params: Dictionary) -> void:
+    var fs: EditorFileSystem = EditorInterface.get_resource_filesystem()
+
+    if fs.is_importing():
+        send_error(peer, cmd_id, "A resource import is already in progress in the editor; retry once it finishes")
+        return
+
+    var requested: Array = params.get("paths", [])
+    var existing_paths: PackedStringArray = PackedStringArray()
+    var missing_paths: PackedStringArray = PackedStringArray()
+    for p in requested:
+        var p_str: String = String(p)
+        if FileAccess.file_exists(p_str):
+            existing_paths.append(p_str)
+        else:
+            missing_paths.append(p_str)
+
+    if requested.is_empty():
+        # No specific paths: rescan the whole project for new/changed/removed
+        # files. This runs on a background thread, so it is not finished by
+        # the time this response is sent.
+        fs.scan()
+        send_success(peer, cmd_id, {"mode": "full_scan", "scanning": fs.is_scanning()})
+        return
+
+    if existing_paths.is_empty():
+        send_error(peer, cmd_id, "None of the given paths exist: " + ", ".join(missing_paths))
+        return
+
+    # Unlike scan(), reimport_files() runs on the main thread and blocks
+    # until it finishes, so the reimport is genuinely done by the time we
+    # respond.
+    fs.reimport_files(existing_paths)
+    send_success(peer, cmd_id, {
+        "mode": "reimport",
+        "reimported": existing_paths,
+        "skipped_missing": missing_paths
+    })
 
 func send_success(peer: WebSocketPeer, cmd_id: String, result: Dictionary) -> void:
     var response = {
