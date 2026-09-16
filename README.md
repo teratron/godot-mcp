@@ -1,75 +1,72 @@
 # Godot MCP Server
 
-A high-performance, cross-platform Model Context Protocol (MCP) server written in Rust that provides deep, bidirectional control over the Godot Engine (4.x+) for AI coding assistants.
+A high-performance, cross-platform Model Context Protocol (MCP) server written in Rust that provides bidirectional control over the Godot Engine (4.x+) for AI coding assistants.
 
-Designed for uncompromising execution speed, zero runtime dependencies, and seamless operation across **Windows**, **Linux**, and **macOS**.
+Designed for fast execution, zero runtime dependencies, and seamless operation across **Windows**, **Linux**, and **macOS**.
 
 ## Key Features
 
-- **Blazing Fast Native Rust Core**: Built on Tokio async I/O with zero-overhead JSON-RPC handling and sub-millisecond bridge latency. No Node.js or Python runtime required.
-- **Cross-Platform Compatibility**: Single standalone executable for Windows (`godot-mcp.exe`), Linux (`godot-mcp`), and macOS (`godot-mcp` with Apple Silicon and Intel support).
-- **Dual-Mode Engine Architecture**: Operates via a live WebSocket bridge in active Godot Editor sessions, with automatic fallback to headless CLI execution when the editor is closed.
-- **Full Scene & Node Control**: Query, instantiate, configure, re-parent, and inspect 2D and 3D scenes with full property reflection.
-- **Visual Feedback & Multimodal Inspection**: Capture viewport frames, active camera views, or isolated node renderings directly into base64 images for multimodal LLMs.
-- **Live Scripting & Diagnostics**: Read, create, update, and validate GDScript files with real-time parser error detection and symbol resolution.
-- **Safe Editor Integration**: All editor mutations route through `EditorUndoRedoManager`, giving human developers full undo/redo control (`Ctrl+Z`) over AI-generated changes.
-- **Runtime Debugging & Log Streaming**: Launch game scenes, stream standard output and errors in real time, monitor breakpoints, and capture runtime stack traces.
+- **Native Rust Core**: Built on Tokio async I/O with JSON-RPC handling over stdio. No Node.js or Python runtime required.
+- **Cross-Platform Compatibility**: Prebuilt standalone binaries for Windows (`godot-mcp.exe`), Linux (`godot-mcp`), and macOS (`godot-mcp`, Intel and Apple Silicon).
+- **Live Editor Bridge**: Connects to a running Godot Editor session over WebSocket to inspect and mutate the currently open scene in real time.
+- **Headless CLI Fallback**: Falls back to invoking the Godot binary directly (`--headless`, `--check-only`, etc.) for engine version queries, script validation, and launching the editor/project when the live bridge is unavailable.
+- **Scene & Node Control**: Query the scene tree, add/remove nodes, and inspect or modify exported node properties.
+- **Viewport Capture**: Capture the active Godot editor viewport as a base64-encoded PNG for multimodal inspection.
+- **Scripting Helpers**: Generate boilerplate GDScript files and run headless syntax validation via the Godot CLI checker.
+- **Safe Editor Integration**: Node mutations (add/remove/set properties) route through `EditorUndoRedoManager`, so human developers keep full undo/redo control (`Ctrl+Z`) over AI-driven changes.
 
 ## Architecture
 
 The system consists of two tightly coupled components:
 
 1. **Godot Editor Bridge Plugin (`addons/godot_mcp/`)**:
-   A lightweight, zero-dependency GDScript plugin running inside the Godot Editor. It opens a local WebSocket server (default port `9333`) providing real-time scene tree inspection, editor command execution, and viewport screenshot streaming.
+   A lightweight, zero-dependency GDScript plugin running inside the Godot Editor. It opens a local WebSocket server (default port `9333`) providing scene tree inspection, node mutation, and viewport capture commands.
 
 2. **Core MCP Server (Rust)**:
-   A high-speed binary server implementing the Model Context Protocol over stdio. It manages bidirectional communication between the AI assistant and the Godot Editor bridge, or invokes Godot in headless CLI mode when offline operations are requested.
+   A binary implementing the Model Context Protocol over stdio. It forwards tool calls to the Godot Editor bridge when connected, or invokes the Godot binary directly in headless mode for CLI-only operations (version lookup, script validation, launching the editor/project).
 
 ## Prerequisites
 
-- Godot Engine 4.3+ (Standard or .NET builds, verified on 4.8.dev)
-- Rust toolchain 1.80+ (for building from source; precompiled binaries require no toolchain)
+- Godot Engine 4.3+ (tested against 4.8 dev builds). Version 4.3+ is required because the bundled `.uid` resource identifiers depend on it.
+
+No Rust toolchain or other build tooling is required — install from the prebuilt release archives below.
 
 ## Configuration
 
-The server reads environment variables from a local `.env` file or from the host system:
+The server reads environment variables from a local `.env` file (in the server's working directory) or from the host system:
 
 ```env
 # Path to the primary Godot executable
-# Windows: "C:\Program Files\Godot\Godot.exe"
-# Linux: "/usr/bin/godot"
-# macOS: "/Applications/Godot.app/Contents/MacOS/Godot"
-GODOT_PATH="C:\Program Files\Godot\Godot.exe"
+# Windows: "C:\path\to\Godot\Godot.exe"
+# Linux:   "/path/to/godot"
+# macOS:   "/path/to/Godot.app/Contents/MacOS/Godot"
+GODOT_PATH="C:\path\to\Godot\Godot.exe"
 
-# Path to the Godot console wrapper (Windows) for synchronous log capturing
-GODOT_CONSOLE_PATH="C:\Program Files\Godot\Godot_console.exe"
-
-# Communication port between MCP server and Godot Editor bridge
+# Communication port between the MCP server and the Godot Editor bridge
 GODOT_DEBUG_PORT="9333"
-
-# Optional remote MCP URL when running in HTTP/SSE transport mode
-GODOT_MCP_URL=""
 ```
+
+If `GODOT_PATH` is unset or points to a missing file, the server searches a short list of common install locations for your platform, then falls back to `godot` on `PATH`.
+
+> **Reserved, not yet active:** `GODOT_CONSOLE_PATH` and `GODOT_MCP_URL` are accepted as environment variables/CLI flags but are not consumed by any code path yet (no synchronous console log capture, no HTTP/SSE transport). They are placeholders for planned features — see [Roadmap](#roadmap).
 
 ## Installation
 
-### 1. Build the MCP Server
+### 1. Download the MCP server binary
 
-Build the optimized release binary for your platform:
+Grab the archive matching your OS/architecture from the [Releases page](https://github.com/teratron/godot-mcp/releases/latest) and extract it anywhere on disk:
 
-```bash
-# Build optimized native binary
-cargo build --release
+| Platform | Asset | Contents |
+| --- | ---- | ---- |
+| Windows x86_64 | `godot-mcp-x86_64-pc-windows-msvc.zip` | `godot-mcp.exe` |
+| Linux x86_64 | `godot-mcp-x86_64-unknown-linux-gnu.tar.gz` | `godot-mcp` |
+| macOS Apple Silicon | `godot-mcp-aarch64-apple-darwin.tar.gz` | `godot-mcp` |
+| macOS Intel | `godot-mcp-x86_64-apple-darwin.tar.gz` | `godot-mcp` |
+| Any platform | `godot-mcp-addon.zip` | `addons/godot_mcp/` (Godot Editor plugin — needed regardless of which binary above you use) |
 
-# The compiled binary is located at:
-# Windows: target/release/godot-mcp.exe
-# Linux:   target/release/godot-mcp
-# macOS:   target/release/godot-mcp
-```
+### 2. Godot Editor plugin setup
 
-### 2. Godot Editor Plugin Setup
-
-1. Copy or symlink the `addons/godot_mcp` directory into your target Godot project's `addons/` folder:
+1. Extract `addons/godot_mcp` from `godot-mcp-addon.zip` (downloaded in step 1) into your target Godot project's `addons/` folder:
 
    ```
    your_godot_project/
@@ -80,11 +77,47 @@ cargo build --release
            └── bridge_server.gd
    ```
 
-2. Open your project in Godot Editor.
-3. Go to **Project -> Project Settings -> Plugins** and enable **Godot MCP Bridge**.
-4. The plugin automatically begins listening on the port configured in `.env` (default: `9333`).
+2. Open your project in the Godot Editor.
+3. Go to **Project → Project Settings → Plugins** and enable **Godot MCP Bridge**.
+4. The plugin automatically begins listening on the port configured for your project (default: `9333`).
 
-### 3. MCP Client Configuration
+### 3. MCP client configuration
+
+Point your MCP client at the binary from step 1, and set `GODOT_PATH` to your actual Godot executable. **Do not guess this path or assume a default install location** — official Windows builds ship as a version-named, portable executable (e.g. `Godot_v4.8.2-stable_win64.exe`) that the user extracts wherever they like, so the exact filename and folder vary per machine.
+
+#### Claude Code (project-scoped `.mcp.json`)
+
+Both the server binary's location and `GODOT_PATH` are machine-specific — two developers on the same repo will almost never have identical values. **Never commit a `.mcp.json` containing real absolute paths.** Instead:
+
+1. Commit a `.mcp.json.example` with placeholder paths, and add this to the project's `.gitignore`:
+
+   ```gitignore
+   .mcp.json
+   !.mcp.json.example
+   ```
+
+2. Each developer copies it locally and fills in their own paths:
+
+   ```bash
+   cp .mcp.json.example .mcp.json
+   ```
+
+`.mcp.json.example`:
+
+```json
+{
+  "mcpServers": {
+    "godot": {
+      "command": "/path/to/godot-mcp/godot-mcp",
+      "args": [],
+      "env": {
+        "GODOT_PATH": "/path/to/Godot/Godot_v4.x-stable_platform.exe",
+        "GODOT_DEBUG_PORT": "9333"
+      }
+    }
+  }
+}
+```
 
 #### Claude Desktop
 
@@ -96,11 +129,10 @@ Windows:
 {
   "mcpServers": {
     "godot": {
-      "command": "C:/path/to/godot-mcp/target/release/godot-mcp.exe",
+      "command": "C:\\path\\to\\godot-mcp\\godot-mcp.exe",
       "args": [],
       "env": {
-        "GODOT_PATH": "C:\\Program Files\\Godot\\Godot.exe",
-        "GODOT_CONSOLE_PATH": "C:\\Program Files\\Godot\\Godot_console.exe",
+        "GODOT_PATH": "C:\\path\\to\\Godot\\Godot_v4.x-stable_win64.exe",
         "GODOT_DEBUG_PORT": "9333"
       }
     }
@@ -114,10 +146,10 @@ Linux / macOS:
 {
   "mcpServers": {
     "godot": {
-      "command": "/path/to/godot-mcp/target/release/godot-mcp",
+      "command": "/path/to/godot-mcp/godot-mcp",
       "args": [],
       "env": {
-        "GODOT_PATH": "/usr/bin/godot",
+        "GODOT_PATH": "/path/to/godot",
         "GODOT_DEBUG_PORT": "9333"
       }
     }
@@ -127,13 +159,13 @@ Linux / macOS:
 
 #### Cursor / Antigravity / VS Code
 
-Configure the server in your MCP settings (`.cursor/mcp.json` or `.gemini/antigravity/mcp/godot.json`):
+Configure the server in your MCP settings (`.cursor/mcp.json` or equivalent):
 
 ```json
 {
   "mcpServers": {
     "godot": {
-      "command": "/path/to/godot-mcp/target/release/godot-mcp.exe",
+      "command": "/path/to/godot-mcp/godot-mcp",
       "args": []
     }
   }
@@ -145,30 +177,35 @@ Configure the server in your MCP settings (`.cursor/mcp.json` or `.gemini/antigr
 Copy and paste this prompt to allow an AI assistant to detect your environment and install the Godot MCP server automatically:
 
 ```text
-You are an expert systems engineer tasked with configuring and verifying the Godot MCP server on this machine.
+You are an expert systems engineer tasked with installing the Godot MCP server (https://github.com/teratron/godot-mcp) for this user. You are working in an arbitrary Godot project directory, not a clone of that repository — do not assume any of its files are already present locally.
 
 Follow this exact execution plan:
 1. Environment Detection:
-   - Identify the host operating system (Windows, Linux, or macOS).
-   - Inspect `.env` in the repository root and verify that `GODOT_PATH` points to a valid Godot executable.
-   - Run `<GODOT_PATH> --version` to confirm Godot is operational.
-2. Build the Server Binary:
-   - Run `cargo build --release` in the project root.
-   - Confirm that the binary exists (`target/release/godot-mcp.exe` on Windows, `target/release/godot-mcp` on Linux/macOS).
+   - Identify the host operating system and architecture (Windows, Linux, or macOS; x86_64 or arm64).
+   - **Ask the user for the exact path to their Godot executable — never guess or assume a default install location.** Official Windows builds are portable, version-named files (e.g. `Godot_v4.8.2-stable_win64.exe`) extracted wherever the user chose; there is no reliable standard path to infer this from.
+   - Once given the path, run `<GODOT_PATH> --version` to confirm it is a valid, working Godot executable before proceeding.
+2. Obtain the Server Binary and Addon from the remote repository (https://github.com/teratron/godot-mcp) — do not look for a local checkout:
+   - Preferred: download the release matching this OS/architecture, e.g. via
+     `gh release download --repo teratron/godot-mcp --pattern "godot-mcp-<target-triple>.*"`
+     (or the direct asset URL from https://github.com/teratron/godot-mcp/releases/latest if `gh` is unavailable), plus
+     `gh release download --repo teratron/godot-mcp --pattern "godot-mcp-addon.zip"`.
+   - Extract both into a persistent location outside the target Godot project (e.g. `%LOCALAPPDATA%\godot-mcp\` on Windows, `~/.local/share/godot-mcp/` on Linux, `~/Library/Application Support/godot-mcp/` on macOS).
 3. Install the Godot Addon:
    - Identify the user's active Godot project directory.
-   - Copy `addons/godot_mcp` into `<target_project>/addons/godot_mcp`.
+   - Copy the `addons/godot_mcp` folder obtained in step 2 into `<target_project>/addons/godot_mcp`.
    - Ensure the plugin is enabled in `<target_project>/project.godot` under `[editor_plugins]` with `enabled=PackedStringArray("res://addons/godot_mcp/plugin.cfg")`.
 4. Register the MCP Client:
-   - Locate the active MCP client configuration file (e.g., Claude Desktop, Cursor, or Antigravity).
-   - Register the server under the key "godot" with the full path to the compiled binary and the required environment variables.
+   - Locate the active MCP client configuration file (e.g., Claude Code's `.mcp.json`, Claude Desktop, Cursor, or Antigravity).
+   - Register the server under the key "godot" with the full path to the binary from step 2 and the `GODOT_PATH` the user provided in step 1.
+   - If the target is a project-scoped `.mcp.json` inside a shared repository, **never commit it with real absolute paths**: write a `.mcp.json.example` with placeholders instead, add `.mcp.json` (but not `.mcp.json.example`) to `.gitignore`, and have the user copy the example to `.mcp.json` locally.
 5. End-to-End Verification:
-   - Execute the test suite using `cargo test`.
    - Trigger a basic verification call (e.g., `godot_get_version` or `godot_get_scene_tree`).
    - Confirm healthy communication and report the detected version and tool list.
 ```
 
 ## Quality Assurance & Development
+
+> This section is for contributing to godot-mcp itself. If you only want to use the addon in your own Godot project, see [Installation](#installation) above — no local build is needed.
 
 The codebase enforces strict testing, formatting, and linting standards:
 
@@ -202,50 +239,54 @@ cargo clippy --all-targets --all-features -- -D warnings
 ### GDScript Addon Validation
 
 ```bash
-# Validate GDScript syntax using Godot CLI
+# Validate GDScript syntax using the Godot CLI
 godot --headless --check-only --script addons/godot_mcp/plugin.gd
 ```
+
+### Cutting a release
+
+Pushing a tag matching `v*.*.*` (e.g. `v0.1.0`) runs `.github/workflows/release.yml`, which builds the server for Windows, Linux, macOS (Intel), and macOS (Apple Silicon), and attaches the archives to a GitHub Release.
 
 ## Available MCP Tools
 
 ### Project & Engine Control
 
-- `godot_get_version`: Returns the engine version and build metadata.
-- `godot_get_project_info`: Inspects `project.godot` settings, render pipeline, and autoloads.
-- `godot_launch_editor`: Launches the Godot Editor for a designated project path.
-- `godot_run_project`: Runs the active project or a specific scene in debug mode.
-- `godot_stop_project`: Stops any active debug instance.
+- `godot_get_version`: Returns the Godot Engine version. Uses the live editor bridge if connected, otherwise falls back to `godot --version`.
+- `godot_get_project_info`: Inspects the project currently open in the live editor (name, main scene, enabled features). Requires the editor bridge to be connected.
+- `godot_launch_editor`: Launches the Godot Editor for a given project directory as a detached process.
+- `godot_run_project`: Runs the project (or a specific scene) in a detached process via headless/CLI invocation.
 
 ### Scene Management
 
-- `godot_create_scene`: Creates a new `.tscn` scene with a specified root node type and script.
-- `godot_save_scene`: Saves changes to an open or specified scene.
-- `godot_get_scene_tree`: Retrieves the hierarchical node tree of the current open scene.
-- `godot_open_scene`: Opens a scene file in the editor.
+- `godot_get_scene_tree`: Retrieves the node hierarchy of the scene currently open in the editor.
+- `godot_open_scene`: Opens a scene file in the editor by its `res://` path.
+- `godot_save_scene`: Saves the current open scene in the editor.
 
 ### Node Operations
 
-- `godot_add_node`: Adds a new child node to a specified parent path in the scene tree.
-- `godot_remove_node`: Removes a node by its node path.
-- `godot_set_node_properties`: Modifies exported properties, transforms, or materials on a target node.
-- `godot_get_node_properties`: Inspects all properties, types, and current values of a target node.
+- `godot_add_node`: Adds a new child node to a parent path in the active scene, with undo/redo support.
+- `godot_remove_node`: Removes a node by its node path, with undo/redo support.
+- `godot_get_node_properties`: Inspects all properties and export variables of a target node.
+- `godot_set_node_properties`: Modifies exported properties on a target node, with undo/redo support.
 
-### Scripting & Resources
+### Scripting
 
-- `godot_create_script`: Generates a new GDScript with standard templates and class definitions.
-- `godot_attach_script`: Attaches an existing script to a target node.
-- `godot_validate_script`: Runs static analysis and syntax checks on a GDScript file without execution.
-- `godot_resave_resources`: Forces re-import and cache invalidation for updated assets and resources.
+- `godot_create_script`: Writes a new GDScript file to disk with a standard `extends`/`class_name`/`_ready()` template.
+- `godot_validate_script`: Runs `godot --headless --check-only` against a `.gd` file and reports syntax errors.
 
-### Multimodal & Visual Inspection
+### Visual Inspection
 
-- `godot_capture_viewport`: Captures an image of the current 2D/3D editor viewport as a base64 PNG.
-- `godot_capture_camera`: Captures the view from an in-scene Camera2D or Camera3D node.
+- `godot_capture_viewport`: Captures the active editor viewport as a base64 PNG. Requires the editor bridge to be connected with a scene open.
 
-### Diagnostics & Console
+## Roadmap
 
-- `godot_get_debug_log`: Retrieves recent console outputs, engine warnings, and script errors.
-- `godot_get_stack_trace`: Fetches stack trace details when execution is paused on error.
+The following ideas are referenced in older design notes or reserved config fields but are **not implemented yet**:
+
+- Runtime log streaming and stack trace capture (`godot_get_debug_log`, `godot_get_stack_trace`)
+- In-scene camera capture (`godot_capture_camera`), as opposed to the editor viewport
+- Scene creation and resource resave tools (`godot_create_scene`, `godot_resave_resources`)
+- Script attach/read/update tools beyond `godot_create_script` / `godot_validate_script`
+- Remote HTTP/SSE transport (`GODOT_MCP_URL`) and synchronous console log capture via a console wrapper (`GODOT_CONSOLE_PATH`)
 
 ## License
 
