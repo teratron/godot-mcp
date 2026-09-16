@@ -84,9 +84,10 @@ impl BridgeClient {
             while let Some(msg_result) = ws_stream.next().await {
                 match msg_result {
                     Ok(Message::Text(text)) => {
-                        let resp: BridgeResponse = serde_json::from_str(text.as_str()).map_err(|e| {
-                            McpError::Protocol(format!("Malformed bridge response: {e}"))
-                        })?;
+                        let resp: BridgeResponse =
+                            serde_json::from_str(text.as_str()).map_err(|e| {
+                                McpError::Protocol(format!("Malformed bridge response: {e}"))
+                            })?;
 
                         if resp.command_id == cmd_id {
                             if resp.status == "success" {

@@ -4,7 +4,7 @@ use crate::config::Config;
 use crate::error::Result;
 use crate::protocol::{JsonRpcRequest, JsonRpcResponse};
 use crate::tools::ToolManager;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tracing::{error, info};
@@ -134,4 +134,3 @@ impl McpServer {
         Ok(())
     }
 }
-

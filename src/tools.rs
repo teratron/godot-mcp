@@ -1,7 +1,7 @@
 use crate::bridge::BridgeClient;
 use crate::cli_runner::CliRunner;
 use crate::protocol::{Tool, ToolResult};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -231,8 +231,12 @@ impl ToolManager {
             "godot_get_scene_tree" => self.handle_bridge_call("get_scene_tree", args).await,
             "godot_add_node" => self.handle_bridge_call("add_node", args).await,
             "godot_remove_node" => self.handle_bridge_call("remove_node", args).await,
-            "godot_get_node_properties" => self.handle_bridge_call("get_node_properties", args).await,
-            "godot_set_node_properties" => self.handle_bridge_call("set_node_properties", args).await,
+            "godot_get_node_properties" => {
+                self.handle_bridge_call("get_node_properties", args).await
+            }
+            "godot_set_node_properties" => {
+                self.handle_bridge_call("set_node_properties", args).await
+            }
             "godot_capture_viewport" => self.handle_capture_viewport().await,
             "godot_open_scene" => self.handle_bridge_call("open_scene", args).await,
             "godot_save_scene" => self.handle_bridge_call("save_scene", args).await,
@@ -261,7 +265,10 @@ impl ToolManager {
             )),
             Err(e) => ToolResult::error(
                 format!("Failed to retrieve Godot version: {e}"),
-                &["Verify GODOT_PATH in .env", "Ensure Godot executable is installed and reachable"],
+                &[
+                    "Verify GODOT_PATH in .env",
+                    "Ensure Godot executable is installed and reachable",
+                ],
             ),
         }
     }
@@ -281,7 +288,11 @@ impl ToolManager {
     }
 
     async fn handle_capture_viewport(&self) -> ToolResult {
-        match self.bridge.send_command("capture_viewport", json!({})).await {
+        match self
+            .bridge
+            .send_command("capture_viewport", json!({}))
+            .await
+        {
             Ok(res) => {
                 if let (Some(data), Some(mime)) = (
                     res.get("data").and_then(|v| v.as_str()),
@@ -365,9 +376,8 @@ impl ToolManager {
             String::new()
         };
 
-        let content = format!(
-            "extends {extends_class}\n{class_name_decl}\nfunc _ready() -> void:\n\tpass\n"
-        );
+        let content =
+            format!("extends {extends_class}\n{class_name_decl}\nfunc _ready() -> void:\n\tpass\n");
 
         let path = Path::new(file_path_str);
         if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
@@ -402,10 +412,13 @@ impl ToolManager {
             .await
         {
             Ok(msg) => ToolResult::text(msg),
-            Err(e) => ToolResult::error(format!("Script validation failed: {e}"), &[
-                "Check GDScript syntax line numbers",
-                "Ensure base class and node types exist in the engine",
-            ]),
+            Err(e) => ToolResult::error(
+                format!("Script validation failed: {e}"),
+                &[
+                    "Check GDScript syntax line numbers",
+                    "Ensure base class and node types exist in the engine",
+                ],
+            ),
         }
     }
 }

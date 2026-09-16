@@ -28,4 +28,3 @@ pub enum McpError {
 }
 
 pub type Result<T> = std::result::Result<T, McpError>;
-
