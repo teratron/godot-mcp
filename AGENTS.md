@@ -67,8 +67,11 @@ Before submitting or committing changes, agents must execute and pass the comple
 
 4. **GDScript Syntax Check**:
 
+   The repo root has its own minimal `project.godot` so the addon's `class_name` declarations resolve. `--path .` is required — without it the check fails with `Could not find type "GodotMcpBridgeServer"`.
+
    ```bash
-   godot --headless --check-only --script addons/godot_mcp/plugin.gd
+   godot --headless --path . --import   # first run only, or after script changes
+   godot --headless --check-only --path . --script addons/godot_mcp/plugin.gd
    ```
 
 ## Tool Invocation Protocols for AI Agents

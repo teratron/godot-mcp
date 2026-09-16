@@ -238,10 +238,17 @@ cargo clippy --all-targets --all-features -- -D warnings
 
 ### GDScript Addon Validation
 
+The repository root is itself a minimal Godot project (`project.godot`) whose only purpose is to give the addon's `class_name` declarations somewhere to resolve during headless checks. On a fresh checkout, run the import once so Godot builds its script class cache, then validate:
+
 ```bash
+# One-time (or after adding/removing scripts): build the script class cache
+godot --headless --path . --import
+
 # Validate GDScript syntax using the Godot CLI
-godot --headless --check-only --script addons/godot_mcp/plugin.gd
+godot --headless --check-only --path . --script addons/godot_mcp/plugin.gd
 ```
+
+Omitting `--path .` will fail with `Could not find type "GodotMcpBridgeServer"`, since class name resolution requires a real project context.
 
 ### Cutting a release
 

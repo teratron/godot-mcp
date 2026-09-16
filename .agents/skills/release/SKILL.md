@@ -22,10 +22,11 @@ Pushing a tag matching `v*.*.*` triggers `.github/workflows/release.yml`, which 
    cargo test
    ```
 
-   If a Godot binary is reachable (`GODOT_PATH` in `.env`, or `godot` on `PATH`), also run:
+   If a Godot binary is reachable (`GODOT_PATH` in `.env`, or `godot` on `PATH`), also run (the repo root is itself a minimal Godot project so `class_name` resolves — `--path .` is required, and `--import` must run at least once for a fresh `.godot/` cache):
 
    ```bash
-   godot --headless --check-only --script addons/godot_mcp/plugin.gd
+   godot --headless --path . --import
+   godot --headless --check-only --path . --script addons/godot_mcp/plugin.gd
    ```
 
    Stop and report if any check fails. Do not tag a red build.
